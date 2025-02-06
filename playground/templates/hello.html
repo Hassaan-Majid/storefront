@@ -5,5 +5,12 @@
     {% else %}
     <h1>Hello World</h1>
     {% endif %}
+    <ul>
+      {%for x in products%}
+      <li>
+        {{x.id}} - {{x.customer.first_name}}
+      </li>
+      {%endfor%}
+    </ul>
   </body>
 </html>
