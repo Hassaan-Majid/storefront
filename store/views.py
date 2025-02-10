@@ -12,7 +12,7 @@ from rest_framework.viewsets import ModelViewSet,GenericViewSet
 from rest_framework.mixins import CreateModelMixin,RetrieveModelMixin,DestroyModelMixin,UpdateModelMixin
 from django_filters.rest_framework import DjangoFilterBackend
 from .models import Product,Collection,OrderItem,Review,Cart,CartItem,Customer,Order
-from .serializer import ProductSerializer,CollectionSerializer,ReviewSerializer,CartSerializer,CartItemSerializer,AddCartItemSerlializer,UpdateCartItemSerializer,CustomerSerializer,OrderSerializer
+from .serializer import ProductSerializer,CollectionSerializer,ReviewSerializer,CartSerializer,CartItemSerializer,AddCartItemSerlializer,UpdateCartItemSerializer,CustomerSerializer,OrderSerializer,CreateOrderSerializer
 from rest_framework import status
 from django.db.models.aggregates import Count
 from .permissions import IsAdminOrReadOnly
@@ -107,5 +107,19 @@ class CustomerViewSet(ModelViewSet):
 
 
 class OrderViewSet(ModelViewSet):
-        queryset = Order.objects.all()
-        serializer_class = OrderSerializer
+        permission_classes = [IsAuthenticated]
+        
+        def get_serializer(self, *args, **kwargs):
+                if self.request == 'POST':
+                        return CreateOrderSerializer
+                return OrderSerializer
+
+        def get_serializer_context(self):
+                return {'user_id': self.request.user.id}
+
+        def get_queryset(self):
+                user = self.request.user
+                if user.is_staff:
+                        return Order.objects.all()
+                
+                (customer_id,created) = Customer.objects.only('id').get_or_create(user_id = user.id)
