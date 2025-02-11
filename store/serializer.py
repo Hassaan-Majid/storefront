@@ -1,4 +1,5 @@
 from  rest_framework import serializers
+from django.db import transaction
 from .models import Product,Collection,Review,Cart,CartItem,Customer,Order,OrderItem
 from decimal import Decimal
 
@@ -106,16 +107,43 @@ class OrderItemSerializer(serializers.ModelSerializer):
                 model = OrderItem
                 fields = ['id','product','unit_price','quantity']
 
-
 class OrderSerializer(serializers.ModelSerializer):
     order_items = OrderItemSerializer(many=True)
     class Meta:
         model = Order 
         fields = ['id','placed_at','payment_status','customer','order_items']
 
+class UpdateOrderSerializer(serializers.ModelSerializer):
+    class Meta :
+        model = Order
+        fields = ['payment_status']
+
 class CreateOrderSerializer(serializers.Serializer):
     cart_id = serializers.UUIDField()
+    
+    def validate_cart_id(self,cart_id):
+        if not Cart.objects.filter(pk=cart_id).exists():
+            raise serializers.ValidationError("Cart Not found")
+        elif CartItem.objects.filter(cart_id=cart_id).count()==0:
+            raise serializers.ValidationError("Cart is Empty")
+        return cart_id
 
     def save(self, **kwargs):
-        print(self.validated_data['cart_id'])
-        print(self.context['user_id'])
+        with transaction.atomic():
+            cart_id = self.validated_data['cart_id']
+            
+            customer,created = Customer.objects.get_or_create(user_id = self.context['user_id'])
+            order = Order.objects.create(customer=customer)
+            
+            cart_items = CartItem.objects.select_related('product').filter(cart_id=cart_id)
+            order_items = [OrderItem(
+                    order = order,
+                    product = item.product,
+                    unit_price = item.product.unit_price,
+                    quantity = item.quantity
+                ) for item in cart_items
+            ]
+
+            OrderItem.objects.bulk_create(order_items)
+            Cart.objects.filter(pk=cart_id).delete()
+        return Order
